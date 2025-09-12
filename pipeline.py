@@ -2412,40 +2412,10 @@ if __name__ == "__main__":
     #   - result_dir/local_map/{优化名}_map.jpg: 可视化地图
     #   - 其他中间结果和日志文件
     VIDEO_CONFIGS = [
-        # {
-        #     "video_path": "./dataset/videos/Waikiki Beach Walk - Spring Break in Honolulu, Hawaii [TC82CUk7NWI]_0000.mp4",
-        #     "start_second": 0,
-        #     "max_seconds": 120,
-        #     "frames_per_second": 1,
-        #     "colmap_interval": 0.2,
-        #     "max_distance": 8,
-        #     "text_prompt": "traffic light. fire hydrant. stop sign. parking meter. bench. backpack. umbrella. tie. suitcase. bottle. wine glass. cup. fork. knife. spoon. bowl. banana. apple. sandwich. orange. broccoli. carrot. hot dog. pizza. donut. cake. chair. couch. potted plant. bed. dining table. toilet. tv. laptop. mouse. remote. keyboard. cell phone. microwave. oven. toaster. sink. refrigerator. book. clock. vase. scissors. teddy bear. hair drier. toothbrush. bike.",
-        #     "intrinsic_fx_fy": [751.0000, 640.0000]
-        # },
-        # {
-        #     "video_path": "./dataset/videos/Waikiki Beach Walk - Spring Break in Honolulu, Hawaii [TC82CUk7NWI]_0001.mp4",
-        #     "start_second": 0,
-        #     "max_seconds": 120,
-        #     "frames_per_second": 1,
-        #     "colmap_interval": 0.2,
-        #     "max_distance": 8,
-        #     "text_prompt": "traffic light. fire hydrant. stop sign. parking meter. bench. backpack. umbrella. tie. suitcase. bottle. wine glass. cup. fork. knife. spoon. bowl. banana. apple. sandwich. orange. broccoli. carrot. hot dog. pizza. donut. cake. chair. couch. potted plant. bed. dining table. toilet. tv. laptop. mouse. remote. keyboard. cell phone. microwave. oven. toaster. sink. refrigerator. book. clock. vase. scissors. teddy bear. hair drier. toothbrush. bike.",
-        #     "intrinsic_fx_fy": [751.0000, 640.0000]
-        # },
-        # {
-        #     "video_path": "./dataset/videos/Waikiki Beach Walk - Spring Break in Honolulu, Hawaii [TC82CUk7NWI]_0002.mp4",
-        #     "start_second": 0,
-        #     "max_seconds": 120,
-        #     "frames_per_second": 1,
-        #     "colmap_interval": 0.2,
-        #     "max_distance": 8,
-        #     "text_prompt": "traffic light. fire hydrant. stop sign. parking meter. bench. backpack. umbrella. tie. suitcase. bottle. wine glass. cup. fork. knife. spoon. bowl. banana. apple. sandwich. orange. broccoli. carrot. hot dog. pizza. donut. cake. chair. couch. potted plant. bed. dining table. toilet. tv. laptop. mouse. remote. keyboard. cell phone. microwave. oven. toaster. sink. refrigerator. book. clock. vase. scissors. teddy bear. hair drier. toothbrush. bike.",
-        #     "intrinsic_fx_fy": [751.0000, 640.0000]
-        # },
         {
             "video_path": "./dataset/videos/Waikiki Beach Walk - Spring Break in Honolulu, Hawaii [TC82CUk7NWI]_0000.mp4",
             "start_second": 0,
-            "max_seconds": 10,
+            "max_seconds": 120,
             "frames_per_second": 1,
             "colmap_interval": 0.2,
             "max_distance": 8,
@@ -2455,7 +2425,7 @@ if __name__ == "__main__":
         {
             "video_path": "./dataset/videos/Waikiki Beach Walk - Spring Break in Honolulu, Hawaii [TC82CUk7NWI]_0001.mp4",
             "start_second": 0,
-            "max_seconds": 10,
+            "max_seconds": 120,
             "frames_per_second": 1,
             "colmap_interval": 0.2,
             "max_distance": 8,
@@ -2465,7 +2435,7 @@ if __name__ == "__main__":
         {
             "video_path": "./dataset/videos/Waikiki Beach Walk - Spring Break in Honolulu, Hawaii [TC82CUk7NWI]_0002.mp4",
             "start_second": 0,
-            "max_seconds": 10,
+            "max_seconds": 120,
             "frames_per_second": 1,
             "colmap_interval": 0.2,
             "max_distance": 8,
