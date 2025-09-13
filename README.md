@@ -1,7 +1,166 @@
 # DatasetGenPipeline
 输入一段第一人称视角拍摄的短视频（2min左右），轨迹和所见的物体映射到2D地图上，生成一张 local map
 
-![local map](dataset/assert/outputs_demo/result_dir/local_map/Waikiki_0000_map.jpg)
+![local map](dataset/photos/Waikiki_0000_map.jpg)
+
+## 项目简介
+
+本项目实现了一个基于第一人称拍摄视频的 **局部地图 (local map) 构建管道**。
+通过整合 **COLMAP、DPVO、Grounded-SAM-2、Metric3D** 等工具，可以自动完成：
+
+1. **相机内参估计**（使用 COLMAP）。
+2. **相机轨迹估计**（使用 DPVO）。
+3. **物体检测与分割**（使用 Grounded-SAM-2 + Grounding DINO）。
+4. **深度估计与点云重建**（使用 Metric3D）。
+5. **轨迹与点云的尺度对齐**（通过 DPVO 点云与 Metric3D 点云的匹配）。
+6. **物体坐标从相机系转换到世界系**。
+7. **生成 Local Map**（包含相机轨迹与检测到的物体位置）。
+
+## 使用方法
+
+### 运行主入口
+
+调用 `CombinedPipeline.process_video` 来处理视频：
+
+```python
+from pipeline import CombinedPipeline
+
+pipeline = CombinedPipeline()
+
+# 设置模型路径
+pipeline.set_model_paths(
+    sam2_checkpoint="path/to/sam2_ckpt.pth",
+    model_cfg="path/to/sam2_cfg.yaml",
+    grounding_dino_config="path/to/grounding_dino_cfg.py",
+    grounding_dino_checkpoint="path/to/grounding_dino_ckpt.pth",
+    metric3d_config="path/to/metric3d_cfg.py",
+    metric3d_ckpt="path/to/metric3d_ckpt.pth"
+)
+
+# 运行视频处理
+output_video = pipeline.process_video(
+    video_path="your_video.mp4",
+    text_prompt="chair, table, person",  # 需要检测的类别
+    output_dir="./outputs",
+    max_seconds=30,
+    frames_per_second=2.0,
+    colmap_interval=2.0,
+    need_run_dpvo=True,
+    max_distance=7.0
+)
+```
+
+运行后将生成：
+
+* **处理后的视频**（带检测框和分割结果）
+* **可视化的 local map**
+* **图像mask、深度图、轨迹文件等等中间生成物**
+
+
+## 代码流程
+
+### 1. 相机内参计算（`_compute_average_focal_lengths`）
+
+* 从视频中按间隔抽帧。
+* 使用 COLMAP 进行特征提取、匹配和增量重建。
+* 得到焦距参数 `fx, fy` 和图像中心点 `cx, cy`。
+* 写入 `intrinsic.txt` 与 DPVO 的 `camera.txt`。
+
+### 2. 相机轨迹估计（`run_dpvo`）
+
+* 使用 DPVO 从视频帧中恢复相机位姿。
+* 输出轨迹文件（TUM 格式）、轨迹图、点云文件。
+* 点云保存为 `.ply`。
+
+### 3. 模型初始化（`initialize_models`）
+
+* 初始化 **SAM2 视频预测器**、**Grounding DINO**、**Metric3D**。
+* 不同模型根据显存情况选择混合精度或 FP32。
+
+### 4. 物体检测与跟踪（`_process_frame_batch`）
+
+* 使用 Grounding DINO 根据文本提示检测目标。
+* 使用 SAM2 对目标做精细分割并跨帧传播。
+* 保存 mask（`.npy`）、JSON 元数据、可视化结果。
+
+### 5. 深度估计（`_initialize_metric3d` + `do_scalecano_test_with_custom_data_my_designed`）
+
+* 使用 Metric3D 估计深度图。
+* 输出 `.npy` 深度文件、`.ply` 点云文件。
+
+### 6. 尺度对齐（`align_scale_with_metric3d`）
+
+* 将 DPVO 点云投影到相机平面。
+* 与 Metric3D 深度点云进行匹配。
+* 使用 RANSAC 拟合 **全局尺度因子**。
+* 修正轨迹与点云的绝对尺度。
+
+### 7. 生成 Local Map（`_generate_local_map` / `generate_visualization`）
+
+* 绘制相机轨迹（蓝线 + 渐变点）。
+* 标记起点和终点。
+* 将检测到的物体在世界坐标系中绘制到地图。
+* 输出 `local_map.jpg`。
+
+## 主要函数说明
+
+### 类：`CombinedPipeline`
+
+项目的核心类，负责组织整个流程。
+
+#### 设置与初始化
+
+* `set_model_paths(...)`：设置模型路径。
+* `initialize_models(...)`：加载所有模型。
+* `_initialize_metric3d(...)`：加载 Metric3D。
+
+#### 相机与轨迹
+
+* `_compute_average_focal_lengths(video_path, colmap_interval)`：COLMAP 估计焦距。
+* `_get_first_frame_dimensions(frames_dir)`：读取图像尺寸和中心点。
+* `_create_dpvo_calibration_file(video_output_dir)`：生成 DPVO 所需的 `camera.txt`。
+* `run_dpvo(...)`：运行 DPVO 获取轨迹与点云。
+
+#### 尺度与位姿
+
+* `align_scale_with_metric3d(...)`：使用 Metric3D 点云对齐 DPVO 轨迹。
+* `_apply_scale_to_poses(scale)`：应用尺度到位姿。
+* `_apply_scale_to_point_cloud(scale)`：应用尺度到点云。
+* `_save_scaled_trajectory(file, scale)`：保存尺度修正后的轨迹。
+
+#### 物体检测与跟踪
+
+* `_process_frame_batch(...)`：单批帧的物体检测与 mask 传播。
+* `_propagate_and_save_masks(...)`：mask 传播。
+* `_save_mask_and_json(...)`：保存 mask 和 JSON。
+* `_draw_masks_with_position(...)`：计算物体在世界坐标中的位置。
+
+#### 可视化与结果
+
+* `_generate_local_map(output_dir, object_positions)`：生成局部地图。
+* `generate_visualization(...)`：轨迹 + 物体可视化。
+* `process_video(...)`：主入口，整合所有步骤。
+
+## 输出结果目录结构
+
+处理完成后，`output_dir` 下会包含以下结构：
+
+```
+outputs/
+  result_dir/
+    output_video/        # 处理后的视频
+    local_map/           # local map 可视化图
+  yourvideo_xxx/
+    frames/              # 抽取的帧
+    dpvo/                # DPVO结果（轨迹、点云、colmap文件）
+    colmap/              # 相机内参文件
+    mask_data/           # SAM2生成的mask
+    json_data/           # 物体信息json
+    depth_data/          # Metric3D深度点云
+    result/              # 带可视化结果的帧
+    mask_photo/          # mask渲染图
+    depth_photo/         # 深度渲染图
+```
 
 
 ## 环境部署
@@ -118,125 +277,3 @@ cd ..
 ```
 pip install supervision pycolmap scikit-learn transformers pycocotools
 ```
-
-## 代码介绍
-
-管道的核心目标是：给定一个视频和一个文本提示，生成一个带有物体分割掩码、深度信息、相机运动轨迹以及物体在 3D 空间中相对位置（距离）的输出视频和可视化地图。
-
-### 如何使用
-
-代码的使用非常直接，主要通过修改 `__main__` 函数中的配置来实现。
-
-1.  **设置输出目录**:
-    在 `__main__` 函数顶部，设置 `OUTPUT_DIR` 变量，指定所有处理结果的根目录。
-    ```python
-    OUTPUT_DIR = "./outputs/output_1"
-    ```
-
-2.  **配置视频处理任务**:
-    `VIDEO_CONFIGS` 是一个字典列表，每个字典定义了一个待处理视频及其参数。
-    ```python
-    VIDEO_CONFIGS = [
-        {
-            "video_path": "./dataset/videos/your_video.mp4", # [必填] 输入视频路径
-            "start_second": 0, # 从视频的第几秒开始处理
-            "max_seconds": 120, # 最大处理时长（秒），0表示处理整个视频
-            "frames_per_second": 1.0, # 采样率，每秒处理多少帧
-            "colmap_interval": 2.0, # 用于自动计算相机焦距的帧间隔（秒）
-            "max_distance": 7.0, # 可视化地图中显示物体的最大距离（米）
-            "text_prompt": "car. person. traffic light.", # [必填] 检测提示，以点分隔不同物体
-            "intrinsic_fx_fy": [751.0000, 640.0000] # [可选] 已知相机焦距 [fx, fy]，若提供则跳过计算
-        },
-        # 可以添加更多视频配置...
-    ]
-    ```
-
-3.  **配置模型路径**:
-    `PIPELINE_PARAMS` 字典指定了所有预训练模型的本地路径。
-    ```python
-    PIPELINE_PARAMS = {
-        "sam2_checkpoint": "./Grounded-SAM-2/checkpoints/sam2.1_hiera_large.pt",
-        "model_cfg": "configs/sam2.1/sam2.1_hiera_l.yaml",
-        "grounding_dino_config": "Grounding-SAM-2/grounding_dino/groundingdino/config/GroundingDINO_SwinB_cfg.py",
-        "grounding_dino_checkpoint": "Grounded-SAM-2/gdino_checkpoints/groundingdino_swinb_cogcoor.pth",
-        "metric3d_config": "Metric3D/mono/configs/HourglassDecoder/vit.raft5.large.py",
-        "metric3d_ckpt": "Metric3D/weight/metric_depth_vit_large_800k.pth"
-    }
-    ```
-
-4.  **运行代码**:
-    直接运行脚本即可。代码支持多进程并行处理多个视频。
-    ```bash
-    python pipeline.py
-    ```
-
-5.  **查看结果**:
-    处理完成后，结果会保存在 `OUTPUT_DIR` 下：
-    *   **最终视频**: `./outputs/output_1/result_dir/output_video/{video_name}_video.mp4`
-    *   **可视化地图**: `./outputs/output_1/result_dir/local_map/{video_name}_map.jpg`
-    *   **详细日志**: 每个视频的专属日志文件位于其输出目录内。
-
-### 代码核心流程
-
-`CombinedPipeline.process_video` 是主控函数，其执行流程如下：
-
-1.  **焦距计算 (`_compute_average_focal_lengths`)**:
-    *   如果未提供 `intrinsic_fx_fy`，管道会使用 `COLMAP` 对视频的关键帧进行稀疏重建，以估算相机的平均焦距 `(fx, fy)` 和图像中心点 `(cx, cy)`。
-    *   这些内参对于后续的 3D 重建和尺度对齐至关重要。
-
-2.  **视频帧提取 (`_extract_limited_frames`)**:
-    *   根据 `start_second`, `max_seconds`, 和 `frames_per_second` 参数，从原始视频中提取指定范围和帧率的图像序列，并保存到 `frames` 目录。
-
-3.  **相机轨迹估计 (`run_dpvo`)**:
-    *   使用 **DPVO** (Direct Perspective Visual Odometry) 算法处理提取的图像序列。
-    *   DPVO 会输出相机在每一帧的 6DoF 位姿（位置和旋转），并保存为 TUM 格式的轨迹文件 `pose.txt`。
-    *   同时，DPVO 也会生成一个稀疏的 3D 点云。
-
-4.  **模型初始化 (`initialize_models`, `_initialize_metric3d`)**:
-    *   加载并初始化 SAM 2、Grounding DINO 和 Metric3D 模型。
-
-5.  **对象分割与追踪 (`_process_frame_batch`, `_propagate_and_save_masks`)**:
-    *   **批处理**: 代码以批次（例如，每 20 帧）处理视频。
-    *   **首帧检测**: 在每个批次的起始帧，使用 **Grounding DINO** 根据 `text_prompt` 检测物体，并生成边界框。
-    *   **首帧分割**: 使用 **SAM 2 图像预测器**，根据 DINO 的边界框生成精确的物体分割掩码。
-    *   **跨帧追踪**: 使用 **SAM 2 视频预测器**，将起始帧的掩码作为提示，自动追踪该物体在后续帧中的位置和形状，并生成掩码序列。
-
-6.  **深度与点云估计 (`do_scalecano_test_with_custom_data_my_designed`)**:
-    *   使用 **Metric3D** 模型处理 `frames` 目录中的所有图像。
-    *   为每一帧生成高精度的深度图 (`depth_{frame_id}.npy`) 和对应的 3D 点云文件 (`pointcloud_{frame_id}.ply`)。
-
-7.  **尺度对齐 (`align_scale_with_metric3d`)**:
-    *   **核心创新**: DPVO 估计的轨迹和点云是“无尺度”的（即单位是任意的），而 Metric3D 的点云是“有尺度”的（单位是米）。
-    *   该函数通过比较 DPVO 点云和 Metric3D 点云在多个视角下的深度值，使用 **RANSAC** 算法计算出一个全局的**尺度因子**。
-    *   然后，将这个尺度因子应用到 DPVO 的相机轨迹和点云上，使其单位与 Metric3D 一致（米），从而获得真实的物理尺度。
-
-8.  **结果渲染与可视化 (`_draw_masks_with_position`, `generate_visualization`)**:
-    *   **逐帧渲染**: 遍历所有帧，将 SAM 2 的分割掩码、边界框以及计算出的物体距离（基于 Metric3D 点云和对齐后的相机位姿）绘制到原始图像上。
-    *   **生成视频**: 将渲染后的图像序列合成为最终的输出视频。
-    *   **生成地图**: 根据对齐后的相机轨迹和检测到的物体在世界坐标系中的位置，绘制一个 2D 鸟瞰图（局部地图），清晰展示相机路径和物体分布。
-
-### 关键函数详解
-
-*   `set_model_paths(self, ...)`: 设置模型路径，延迟加载。
-
-*   `initialize_models(self, ...)`: 初始化 SAM 2、Grounding DINO 和 Metric3D 模型。注意，为了兼容性，Grounding DINO 被强制使用 FP32 精度。
-
-*   `process_video(self, ...)`: **主入口函数**。协调整个处理流程，从帧提取到最终视频生成。
-
-*   `_compute_average_focal_lengths(self, video_path: str, colmap_interval:float) -> List[float]`:
-    使用 COLMAP 自动计算视频的相机内参（焦距）。这是实现无标定相机 3D 重建的关键一步。
-
-*   `run_dpvo(self, ...)`: 运行 DPVO 算法，生成相机运动轨迹和稀疏点云。
-
-*   `align_scale_with_metric3d(...) -> float`:
-    **核心函数**。通过比较 DPVO 点云和 Metric3D 点云，计算并返回全局尺度因子，实现无尺度轨迹到真实尺度的转换。
-
-*   `_apply_scale_to_poses(self, scale: float)` 和 `_apply_scale_to_point_cloud(self, scale: float)`:
-    将计算出的尺度因子应用到相机位姿和点云数据上。
-
-*   `_draw_masks_with_position(...) -> Dict[int, Dict[str, Any]]`:
-    主渲染函数。它加载每一帧的分割掩码、深度点云和相机位姿，计算物体距离，并将所有信息绘制到图像上。它返回一个包含所有物体位置信息的字典，用于生成地图。
-
-*   `generate_visualization(...)`: 生成最终的 2D 可视化地图，展示相机轨迹和检测到的物体。
-
-*   `process_single_video(...)`: 一个独立的包装函数，用于在多进程中安全地处理单个视频，包含独立的日志记录。
