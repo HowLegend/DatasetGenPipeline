@@ -170,7 +170,6 @@ outputs/
 ```
 git clone https://github.com/HowLegend/DatasetGenPipeline.git
 cd DatasetGenPipeline
-
 ```
 ### 创建 conda 环境
 使用 python=3.10 以及 torch >= 2.3.1、torchvision>=0.18.1 和 cuda-12.1 以上
