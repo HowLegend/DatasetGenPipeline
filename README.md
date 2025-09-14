@@ -164,9 +164,7 @@ outputs/
 
 
 ## 环境部署
-#### PS：
-> 相关开源项目的 git clone 已经放入这个项目了，必要的权重数据也已放在对于位置。所以只需要按下面步骤配置好 conda 环境中的依赖就可以了，不用克隆其他仓库和下载其他权重资源。
-### 克隆 DatasetGenPipeline
+### 克隆本项目 DatasetGenPipeline
 ```
 git clone https://github.com/HowLegend/DatasetGenPipeline.git
 cd DatasetGenPipeline
