@@ -1,0 +1,10 @@
+# 忽略Grounded-SAM-2、Metric3D、DPVO文件夹
+Grounded-SAM-2/
+Metric3D/
+DPVO/
+
+# 忽略output文件夹
+outputs/
+
+# 忽略数据集文件夹
+dataset/
